@@ -63,6 +63,8 @@ IMapView<hstring, ViewManagerPropertyType> ReactCameraViewManager::NativeProps()
   nativeProps.Insert(L"barCodeScannerEnabled", ViewManagerPropertyType::Boolean);
   nativeProps.Insert(L"barCodeTypes", ViewManagerPropertyType::Array);
   nativeProps.Insert(L"barCodeReadIntervalMS", ViewManagerPropertyType::Number);
+  nativeProps.Insert(L"faceDetectEnabled", ViewManagerPropertyType::Boolean);
+  nativeProps.Insert(L"objectDetectEnabled", ViewManagerPropertyType::Boolean);  
   nativeProps.Insert(L"keepAwake", ViewManagerPropertyType::Boolean);
   nativeProps.Insert(L"mirrorVideo", ViewManagerPropertyType::Boolean);
   nativeProps.Insert(L"defaultVideoQuality", ViewManagerPropertyType::Number);
@@ -90,9 +92,24 @@ ConstantProviderDelegate ReactCameraViewManager::ExportedCustomDirectEventTypeCo
     WriteProperty(constantWriter, L"registrationName", BarcodeReadEvent);
     constantWriter.WriteObjectEnd();
 
+    constantWriter.WritePropertyName(FaceDetectEvent);
+    constantWriter.WriteObjectBegin();
+    WriteProperty(constantWriter, L"registrationName", FaceDetectEvent);
+    constantWriter.WriteObjectEnd();
+
+    constantWriter.WritePropertyName(ObjectDetectEvent);
+    constantWriter.WriteObjectBegin();
+    WriteProperty(constantWriter, L"registrationName", ObjectDetectEvent);
+    constantWriter.WriteObjectEnd();
+
     constantWriter.WritePropertyName(CameraReadyEvent);
     constantWriter.WriteObjectBegin();
     WriteProperty(constantWriter, L"registrationName", CameraReadyEvent);
+    constantWriter.WriteObjectEnd();
+
+    constantWriter.WritePropertyName(CameraErrorEvent);
+    constantWriter.WriteObjectBegin();
+    WriteProperty(constantWriter, L"registrationName", CameraErrorEvent);
     constantWriter.WriteObjectEnd();
   };
 }

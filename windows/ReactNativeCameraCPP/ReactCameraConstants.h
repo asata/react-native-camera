@@ -8,7 +8,10 @@
 #include "JSValue.h"
 
 #define BarcodeReadEvent L"onBarCodeRead"
+#define FaceDetectEvent L"onFaceDetect"
+#define ObjectDetectEvent L"onObjectDetect"
 #define CameraReadyEvent L"onCameraReady"
+#define CameraErrorEvent L"onCameraError"
 
 namespace winrt::ReactNativeCameraCPP {
 class ReactCameraConstants {
@@ -65,6 +68,8 @@ class ReactCameraConstants {
   static const int BarcodeReadIntervalMinMS = 200;
   static const int BarcodeReadIntervalMS = 500;
   static const int BarcodeReadTimeoutMS = 5000;
+  static const int DetectReadIntervalMS = 200;
+  static const int DetectReadTimeoutMS = 200;
 
   static winrt::Microsoft::ReactNative::JSValueObject GetAspectConstants() noexcept {
     return winrt::Microsoft::ReactNative::JSValueObject{

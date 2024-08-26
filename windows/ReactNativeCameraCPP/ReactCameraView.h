@@ -6,6 +6,9 @@
 #include "CameraRotationHelper.h"
 #include "ReactCameraConstants.h"
 
+#include "winrt/Microsoft.AI.Skills.SkillInterface.h"
+#include "winrt/Microsoft.AI.Skills.Vision.ObjectDetector.h"
+
 namespace winrt::ReactNativeCameraCPP {
 struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraView> {
  public:
@@ -39,6 +42,8 @@ struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraVi
   void UpdateAspect(int aspect);
   void UpdateDefaultVideoQuality(int videoQuality);
   void UpdateBarcodeScannerEnabled(bool barcodeScannerEnabled);
+  void UpdateFaceDetectEnabled(bool faceDetectEnabled);
+  void UpdateObjectDetectEnabled(bool objectDetectEnabled);
   void UpdateBarcodeTypes(winrt::Microsoft::ReactNative::JSValueArray const &barcodeTypes);
   void UpdateBarcodeReadIntervalMS(int barcodeReadIntervalMS);
 
@@ -68,6 +73,12 @@ struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraVi
   void StartBarcodeScanner();
   void StopBarcodeScanner();
   winrt::Windows::Foundation::IAsyncAction ScanForBarcodeAsync();
+  void StartFaceDetect();
+  void StopFaceDetect();
+  winrt::Windows::Foundation::IAsyncAction ScanForFaceAsync();
+  void StartObjectDetect();
+  void StopObjectDetect();
+  winrt::Windows::Foundation::IAsyncAction ScanForObjectAsync();
 
   void OnOrientationChanged(const bool updatePreview);
   void OnApplicationSuspending();
@@ -105,11 +116,20 @@ struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraVi
 
   winrt::Windows::System::Threading::ThreadPoolTimer m_recordTimer{nullptr};
   winrt::Windows::System::Threading::ThreadPoolTimer m_barcodeScanTimer{nullptr};
+  winrt::Windows::System::Threading::ThreadPoolTimer m_faceDetectTimer{nullptr};
+  winrt::Windows::System::Threading::ThreadPoolTimer m_objectDetectTimer{nullptr};
 
   winrt::event_token m_rotationEventToken{};
   winrt::Windows::UI::Xaml::Application::Suspending_revoker m_applicationSuspendingEventToken;
   winrt::Windows::UI::Xaml::Application::Resuming_revoker m_applicationResumingEventToken;
   winrt::Windows::UI::Xaml::FrameworkElement::Unloaded_revoker m_unloadedEventToken;
+
+  // References a FaceDetector instance.
+  winrt::Windows::Media::FaceAnalysis::FaceDetector m_faceDetector{nullptr};
+
+  winrt::Microsoft::AI::Skills::Vision::ObjectDetector::ObjectDetectorDescriptor m_skillDescriptor{nullptr};
+  winrt::Microsoft::AI::Skills::Vision::ObjectDetector::ObjectDetectorSkill m_skill{nullptr};
+  winrt::Microsoft::AI::Skills::Vision::ObjectDetector::ObjectDetectorBinding m_binding{nullptr};
 
   bool m_isInitialized{false};
   bool m_keepAwake{false};
@@ -120,9 +140,15 @@ struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraVi
   bool m_isPreview{false};
   bool m_mirrorVideo{false};
   bool m_barcodeScannerEnabled{false};
+  bool m_faceDetectEnabled{false};
+  bool m_objectDetectEnabled{false};
 
   int m_barcodeReadIntervalMS{ReactCameraConstants::BarcodeReadIntervalMS};
+  int m_detectReadIntervalMS{ReactCameraConstants::DetectReadIntervalMS};
 
+  int m_videoWidht{0};
+  int m_videoHeight{0};
+  
   std::string m_cameraId;
 
   winrt::Windows::Devices::Enumeration::Panel m_panelType{winrt::Windows::Devices::Enumeration::Panel::Unknown};
@@ -133,5 +159,6 @@ struct ReactCameraView : winrt::Windows::UI::Xaml::Controls::GridT<ReactCameraVi
   std::vector<winrt::ZXing::BarcodeType> m_barcodeTypes;
 
   int m_defaultVideoQuality{ReactCameraConstants::CameraVideoQualityAuto};
+
 };
 } // namespace winrt::ReactNativeCameraCPP

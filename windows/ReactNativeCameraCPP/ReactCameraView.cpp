@@ -6,6 +6,9 @@
 #include "ReactCameraView.h"
 #include "ReactCameraViewManager.h"
 
+#include "winrt/Microsoft.AI.Skills.SkillInterface.h"
+#include "winrt/Microsoft.AI.Skills.Vision.ObjectDetector.h"
+
 namespace winrt {
 using namespace Windows::UI::Xaml;
 using namespace Windows::UI::Xaml::Media;
@@ -22,13 +25,100 @@ using namespace Windows::Media::Playback;
 using namespace Windows::Media::Capture;
 using namespace Windows::Graphics::Imaging;
 using namespace Windows::Media::Devices;
+using namespace Windows::Media::FaceAnalysis;
 using namespace Windows::System::Display;
 using namespace Microsoft::ReactNative;
+using namespace Microsoft::AI::Skills::SkillInterface;
+using namespace Microsoft::AI::Skills::Vision::ObjectDetector;
 } // namespace winrt
 
 using namespace std::chrono;
 
 namespace winrt::ReactNativeCameraCPP {
+// enum to string lookup table for ObjectKind
+static const std::map<ObjectKind, std::string> ObjectKindLookup = {
+    {ObjectKind::Undefined, "Undefined"},
+    {ObjectKind::Person, "Person"},
+    {ObjectKind::Bicycle, "Bicycle"},
+    {ObjectKind::Car, "Car"},
+    {ObjectKind::Motorbike, "Motorbike"},
+    {ObjectKind::Aeroplane, "Aeroplane"},
+    {ObjectKind::Bus, "Bus"},
+    {ObjectKind::Train, "Train"},
+    {ObjectKind::Truck, "Truck"},
+    {ObjectKind::Boat, "Boat"},
+    {ObjectKind::TrafficLight, "TrafficLight"},
+    {ObjectKind::FireHydrant, "FireHydrant"},
+    {ObjectKind::StopSign, "StopSign"},
+    {ObjectKind::ParkingMeter, "ParkingMeter"},
+    {ObjectKind::Bench, "Bench"},
+    {ObjectKind::Bird, "Bird"},
+    {ObjectKind::Cat, "Cat"},
+    {ObjectKind::Dog, "Dog"},
+    {ObjectKind::Horse, "Horse"},
+    {ObjectKind::Sheep, "Sheep"},
+    {ObjectKind::Cow, "Cow"},
+    {ObjectKind::Elephant, "Elephant"},
+    {ObjectKind::Bear, "Bear"},
+    {ObjectKind::Zebra, "Zebra"},
+    {ObjectKind::Giraffe, "Giraffe"},
+    {ObjectKind::Backpack, "Backpack"},
+    {ObjectKind::Umbrella, "Umbrella"},
+    {ObjectKind::Handbag, "Handbag"},
+    {ObjectKind::Tie, "Tie"},
+    {ObjectKind::Suitcase, "Suitcase"},
+    {ObjectKind::Frisbee, "Frisbee"},
+    {ObjectKind::Skis, "Skis"},
+    {ObjectKind::Snowboard, "Snowboard"},
+    {ObjectKind::SportsBall, "SportsBall"},
+    {ObjectKind::Kite, "Kite"},
+    {ObjectKind::BaseballBat, "BaseballBat"},
+    {ObjectKind::BaseballGlove, "BaseballGlove"},
+    {ObjectKind::Skateboard, "Skateboard"},
+    {ObjectKind::Surfboard, "Surfboard"},
+    {ObjectKind::TennisRacket, "TennisRacket"},
+    {ObjectKind::Bottle, "Bottle"},
+    {ObjectKind::WineGlass, "WineGlass"},
+    {ObjectKind::Cup, "Cup"},
+    {ObjectKind::Fork, "Fork"},
+    {ObjectKind::Knife, "Knife"},
+    {ObjectKind::Spoon, "Spoon"},
+    {ObjectKind::Bowl, "Bowl"},
+    {ObjectKind::Banana, "Banana"},
+    {ObjectKind::Apple, "Apple"},
+    {ObjectKind::Sandwich, "Sandwich"},
+    {ObjectKind::Orange, "Orange"},
+    {ObjectKind::Broccoli, "Broccoli"},
+    {ObjectKind::Carrot, "Carrot"},
+    {ObjectKind::HotDog, "HotDog"},
+    {ObjectKind::Pizza, "Pizza"},
+    {ObjectKind::Donut, "Donut"},
+    {ObjectKind::Cake, "Cake"},
+    {ObjectKind::Chair, "Chair"},
+    {ObjectKind::Sofa, "Sofa"},
+    {ObjectKind::PottedPlant, "PottedPlant"},
+    {ObjectKind::Bed, "Bed"},
+    {ObjectKind::DiningTable, "DiningTable"},
+    {ObjectKind::Toilet, "Toilet"},
+    {ObjectKind::Tvmonitor, "Tvmonitor"},
+    {ObjectKind::Laptop, "Laptop"},
+    {ObjectKind::Mouse, "Mouse"},
+    {ObjectKind::Remote, "Remote"},
+    {ObjectKind::Keyboard, "Keyboard"},
+    {ObjectKind::CellPhone, "CellPhone"},
+    {ObjectKind::Microwave, "Microwave"},
+    {ObjectKind::Oven, "Oven"},
+    {ObjectKind::Toaster, "Toaster"},
+    {ObjectKind::Sink, "Sink"},
+    {ObjectKind::Refrigerator, "Refrigerator"},
+    {ObjectKind::Book, "Book"},
+    {ObjectKind::Clock, "Clock"},
+    {ObjectKind::Vase, "Vase"},
+    {ObjectKind::Scissors, "Scissors"},
+    {ObjectKind::TeddyBear, "TeddyBear"},
+    {ObjectKind::HairDryer, "HairDryer"},
+    {ObjectKind::Toothbrush, "Toothbrush"},
+};
 
 /*static*/ winrt::com_ptr<ReactCameraView> ReactCameraView::Create() {
   auto view = winrt::make_self<ReactCameraView>();
@@ -88,6 +178,10 @@ void ReactCameraView::UpdateProperties(IJSValueReader const &propertyMapReader) 
         UpdateBarcodeTypes(propertyValue.AsArray());
       } else if (propertyName == "barCodeReadIntervalMS") {
         UpdateBarcodeReadIntervalMS(propertyValue.AsInt32());
+      } else if (propertyName == "faceDetectEnabled") {
+        UpdateFaceDetectEnabled(propertyValue.AsBoolean());
+      } else if (propertyName == "objectDetectEnabled") {
+        UpdateObjectDetectEnabled(propertyValue.AsBoolean());
       }
     }
   }
@@ -120,6 +214,8 @@ IAsyncAction ReactCameraView::TakePictureAsync(
   }
 
   StopBarcodeScanner();
+  StopFaceDetect();
+  StopObjectDetect();
 
   auto dispatcher = Dispatcher();
   co_await resume_foreground(dispatcher);
@@ -295,6 +391,8 @@ IAsyncAction ReactCameraView::TakePictureAsync(
   co_await resume_background();
 
   StartBarcodeScanner();
+  StartFaceDetect();
+  StartObjectDetect();
 }
 
 IAsyncAction ReactCameraView::RecordAsync(
@@ -309,6 +407,8 @@ IAsyncAction ReactCameraView::RecordAsync(
   }
 
   StopBarcodeScanner();
+  StopFaceDetect();
+  StopObjectDetect();
 
   auto dispatcher = Dispatcher();
   co_await resume_foreground(dispatcher);
@@ -414,6 +514,8 @@ IAsyncAction ReactCameraView::RecordAsync(
   co_await resume_background();
 
   StartBarcodeScanner();
+  StartFaceDetect();
+  StartObjectDetect();
 }
 
 IAsyncAction ReactCameraView::StopRecordAsync() noexcept {
@@ -526,7 +628,7 @@ fire_and_forget ReactCameraView::UpdateDeviceType(int type) {
   if (m_isInitialized) {
     co_await CleanupMediaCaptureAsync();
   }
-  co_await InitializeAsync();
+  //co_await InitializeAsync();
 }
 
 // Request monitor to not turn off if keepAwake is true
@@ -660,6 +762,24 @@ void ReactCameraView::UpdateBarcodeReadIntervalMS(int barcodeReadIntervalMS) {
   m_barcodeReadIntervalMS = std::max<int>(ReactCameraConstants::BarcodeReadIntervalMinMS, barcodeReadIntervalMS);
 }
 
+void ReactCameraView::UpdateFaceDetectEnabled(bool faceDetectEnabled) {
+  m_faceDetectEnabled = faceDetectEnabled;
+  if (m_faceDetectEnabled) {
+    StartFaceDetect();
+  } else {
+    StopFaceDetect();
+  }
+}
+
+void ReactCameraView::UpdateObjectDetectEnabled(bool objectDetectEnabled) {
+  m_objectDetectEnabled = objectDetectEnabled;
+  if (m_objectDetectEnabled) {
+    StartObjectDetect();
+  } else {
+    StopObjectDetect();
+  }
+}
+
 // Intialization takes care few things below:
 // 1. Register rotation helper to update preview if rotation changes.
 // 2. Takes care connected standby scenarios to cleanup and reintialize when suspend/resume
@@ -686,6 +806,25 @@ IAsyncAction ReactCameraView::InitializeAsync() {
       UpdateKeepAwake(m_keepAwake);
       UpdateMirrorVideo(m_mirrorVideo);
       UpdateBarcodeScannerEnabled(m_barcodeScannerEnabled);
+      UpdateFaceDetectEnabled(m_faceDetectEnabled);
+      UpdateObjectDetectEnabled(m_objectDetectEnabled);
+
+      // Create the ObjectDetector skill descriptor, 2ms
+      m_skillDescriptor = ObjectDetectorDescriptor();
+
+      if (m_skill == nullptr) {
+        // Create instance of the skill, 1ms
+        ISkill t_skill = co_await m_skillDescriptor.as<ISkillDescriptor>().CreateSkillAsync();
+        ObjectDetectorSkill temp = t_skill.as<ObjectDetectorSkill>();
+        m_skill = temp;
+
+        if (m_binding == nullptr) {
+          // Create instance of the skill binding, 1300ms
+          ISkillBinding t_binding = co_await temp.CreateSkillBindingAsync();
+          ObjectDetectorBinding temp2 = t_binding.as<ObjectDetectorBinding>();
+          m_binding = temp2;
+        }
+      }
 
       co_await mediaCapture.StartPreviewAsync();
       m_isPreview = true;
@@ -721,8 +860,24 @@ IAsyncAction ReactCameraView::InitializeAsync() {
       }
 
     }
-  } catch (winrt::hresult_error const &) {
+  } catch (winrt::hresult_error const &err) {
     m_isInitialized = false;
+    auto control = this->get_strong().try_as<winrt::FrameworkElement>();
+    if (m_reactContext && control) {
+      m_reactContext.DispatchEvent(
+          control,
+          CameraErrorEvent,
+          [err](
+            winrt::Microsoft::ReactNative::IJSValueWriter const &eventDataWriter) noexcept {
+                  
+            eventDataWriter.WriteObjectBegin();
+            {
+              WriteProperty(eventDataWriter, L"code", err.code());
+              WriteProperty(eventDataWriter, L"message", err.message());
+            }
+            eventDataWriter.WriteObjectEnd();
+          });
+    }
   }
 }
 
@@ -794,6 +949,8 @@ IAsyncAction ReactCameraView::CleanupMediaCaptureAsync() {
     SetEvent(m_signal.get()); // In case recording is still going on
     if (auto mediaCapture = m_childElement.Source()) {
       StopBarcodeScanner();
+      StopFaceDetect();
+      StopObjectDetect();
 
       if (m_isPreview) {
         co_await mediaCapture.StopPreviewAsync();
@@ -929,6 +1086,213 @@ winrt::Windows::Foundation::IAsyncAction ReactCameraView::ScanForBarcodeAsync() 
   co_await resume_background();
 
   StartBarcodeScanner();
+}
+
+void ReactCameraView::StartFaceDetect() {
+  if (m_faceDetectEnabled && !m_faceDetectTimer) {
+    m_faceDetectTimer = winrt::Windows::System::Threading::ThreadPoolTimer::CreatePeriodicTimer(
+        [ref = this->get_strong()](const winrt::Windows::System::Threading::ThreadPoolTimer) noexcept {
+          auto asyncOp = ref->ScanForFaceAsync();
+          asyncOp.wait_for(std::chrono::milliseconds(ReactCameraConstants::DetectReadTimeoutMS));
+        },
+        std::chrono::milliseconds(m_detectReadIntervalMS));
+  }
+}
+
+void ReactCameraView::StopFaceDetect() {
+  if (m_faceDetectTimer) {
+    m_faceDetectTimer.Cancel();
+    m_faceDetectTimer = nullptr;
+  }
+}
+
+winrt::Windows::Foundation::IAsyncAction ReactCameraView::ScanForFaceAsync() {
+  if (!m_isInitialized || !m_faceDetectEnabled || !m_isPreview) {
+    co_return;
+  }
+
+  StopFaceDetect();
+  
+  auto dispatcher = Dispatcher();
+  co_await resume_foreground(dispatcher);
+
+  m_faceDetector = co_await FaceDetector::CreateAsync();
+
+  try {
+    if (auto mediaCapture = m_childElement.Source()) {
+      // Capture the image
+      auto lowLagCapture = co_await mediaCapture.PrepareLowLagPhotoCaptureAsync(
+          winrt::ImageEncodingProperties().CreateUncompressed(winrt::MediaPixelFormat::Nv12));
+      auto capturedPhoto = co_await lowLagCapture.CaptureAsync();
+
+      auto softwareBitmap = capturedPhoto.Frame().SoftwareBitmap();
+
+      co_await lowLagCapture.FinishAsync();
+ 
+      auto control = this->get_strong().try_as<winrt::FrameworkElement>();
+      if (FaceDetector::IsBitmapPixelFormatSupported(softwareBitmap.BitmapPixelFormat())) {
+        IVector<DetectedFace> faces = co_await m_faceDetector.DetectFacesAsync(softwareBitmap);
+
+        if (m_reactContext && control) {
+          m_reactContext.DispatchEvent(
+            control, 
+            FaceDetectEvent,
+            [faces](winrt::Microsoft::ReactNative::IJSValueWriter const &eventDataWriter) noexcept {
+                int32_t faceCount = faces.Size();
+                    
+                eventDataWriter.WriteObjectBegin();
+                {
+                    WriteProperty(eventDataWriter, L"count", faceCount);
+
+                    eventDataWriter.WritePropertyName(L"faces");
+                    {
+                        eventDataWriter.WriteArrayBegin();
+                        for (DetectedFace face : faces) {
+                            eventDataWriter.WriteObjectBegin();
+                            BitmapBounds faceBox = face.FaceBox();
+                            WriteProperty(eventDataWriter, L"x", faceBox.X);
+                            WriteProperty(eventDataWriter, L"y", faceBox.Y);
+                            WriteProperty(eventDataWriter, L"width", faceBox.Width);
+                            WriteProperty(eventDataWriter, L"height", faceBox.Height);
+                            eventDataWriter.WriteObjectEnd();
+                        }
+                        eventDataWriter.WriteArrayEnd();
+                    }
+                }
+                eventDataWriter.WriteObjectEnd();
+            });
+        }
+      }
+    }
+  } catch (winrt::hresult_error const &err) {
+    auto control = this->get_strong().try_as<winrt::FrameworkElement>();
+    if (m_reactContext && control) {
+      m_reactContext.DispatchEvent(
+          control,
+          CameraErrorEvent,
+          [err](winrt::Microsoft::ReactNative::IJSValueWriter const &eventDataWriter) noexcept {
+            eventDataWriter.WriteObjectBegin();
+            {
+              WriteProperty(eventDataWriter, L"code", err.code());
+              WriteProperty(eventDataWriter, L"message", err.message());
+            }
+            eventDataWriter.WriteObjectEnd();
+          });
+    }
+  }
+
+  co_await resume_background();
+
+  StartFaceDetect();
+}
+
+void ReactCameraView::StartObjectDetect() {
+  if (m_objectDetectEnabled && !m_objectDetectTimer) {
+    m_objectDetectTimer = winrt::Windows::System::Threading::ThreadPoolTimer::CreatePeriodicTimer(
+        [ref = this->get_strong()](const winrt::Windows::System::Threading::ThreadPoolTimer) noexcept {
+          auto asyncOp = ref->ScanForObjectAsync();
+          asyncOp.wait_for(std::chrono::milliseconds(ReactCameraConstants::DetectReadTimeoutMS));
+        },
+        std::chrono::milliseconds(m_detectReadIntervalMS));
+  }
+}
+
+void ReactCameraView::StopObjectDetect() {
+  if (m_objectDetectTimer) {
+    m_objectDetectTimer.Cancel();
+    m_objectDetectTimer = nullptr;
+  }
+}
+
+winrt::Windows::Foundation::IAsyncAction ReactCameraView::ScanForObjectAsync() {
+  if (!m_isInitialized || !m_objectDetectEnabled || !m_isPreview) {
+    co_return;
+  }
+
+  StopObjectDetect();
+  
+  auto dispatcher = Dispatcher();
+  co_await resume_foreground(dispatcher);
+
+  try {
+    if (auto mediaCapture = m_childElement.Source()) {
+      // Capture the image
+      auto lowLagCapture = co_await mediaCapture.PrepareLowLagPhotoCaptureAsync(
+          winrt::ImageEncodingProperties().CreateUncompressed(winrt::MediaPixelFormat::Bgra8));
+      auto capturedPhoto = co_await lowLagCapture.CaptureAsync();
+      auto softwareBitmap = capturedPhoto.Frame().SoftwareBitmap();
+      co_await lowLagCapture.FinishAsync();
+
+      int videoWidth = softwareBitmap.PixelWidth();
+      int videoHeight = softwareBitmap.PixelHeight();
+
+      auto control = this->get_strong().try_as<winrt::FrameworkElement>();
+      winrt::Windows::Media::VideoFrame videoFrame = winrt::Windows::Media::VideoFrame(
+          softwareBitmap.BitmapPixelFormat(), videoWidth, videoHeight, BitmapAlphaMode::Ignore);
+      videoFrame = videoFrame.CreateWithSoftwareBitmap(softwareBitmap);
+
+      // Set the video frame on the skill binding.
+      co_await m_binding.SetInputImageAsync(videoFrame);
+
+      // Detect objects in video frame using the skill
+      co_await m_skill.EvaluateAsync(m_binding);
+      
+      IVectorView<ObjectDetectorResult> detectedObjects = m_binding.DetectedObjects();
+      auto deviceKind = m_skill.Device().ExecutionDeviceKind();
+
+      if (m_reactContext && control) {
+        m_reactContext.DispatchEvent(
+            control,
+            ObjectDetectEvent,
+            [detectedObjects, deviceKind, videoWidth, videoHeight, softwareBitmap](
+                winrt::Microsoft::ReactNative::IJSValueWriter const &eventDataWriter) noexcept {
+                int32_t objectCount = detectedObjects.Size();
+
+                eventDataWriter.WriteObjectBegin();
+                {
+                    WriteProperty(eventDataWriter, L"count", objectCount);
+                    WriteProperty(eventDataWriter, L"device", deviceKind);
+                    WriteProperty(eventDataWriter, L"width", videoWidth);
+                    WriteProperty(eventDataWriter, L"height", videoHeight);
+
+                    eventDataWriter.WritePropertyName(L"objects");
+                    {
+                        eventDataWriter.WriteArrayBegin();
+                        for (ObjectDetectorResult detectedObject : detectedObjects) {
+                            eventDataWriter.WriteObjectBegin();
+                          WriteProperty(eventDataWriter, L"label", ObjectKindLookup.at(detectedObject.Kind()));
+                            WriteProperty(eventDataWriter, L"confidence", detectedObject.Confidence());
+                            eventDataWriter.WriteObjectEnd();
+                        }
+                        eventDataWriter.WriteArrayEnd();
+                    }
+                }
+                eventDataWriter.WriteObjectEnd();
+            });
+      }
+
+      //videoFrame.Close();
+    }
+  } catch (winrt::hresult_error const &err) {
+    auto control = this->get_strong().try_as<winrt::FrameworkElement>();
+    if (m_reactContext && control) {
+      m_reactContext.DispatchEvent(
+          control,
+          CameraErrorEvent,
+          [err](winrt::Microsoft::ReactNative::IJSValueWriter const &eventDataWriter) noexcept {
+            eventDataWriter.WriteObjectBegin();
+            {
+              WriteProperty(eventDataWriter, L"code", err.code());
+              WriteProperty(eventDataWriter, L"message", err.message());
+            }
+            eventDataWriter.WriteObjectEnd();
+          });
+    }
+  }
+
+  co_await resume_background();
+
+  StartObjectDetect();
 }
 
 // update preview if display orientation changes.
