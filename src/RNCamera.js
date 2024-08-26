@@ -667,6 +667,11 @@ export default class Camera extends React.Component<PropsType, StateType> {
       this.props.onCameraReady();
     }
   };
+  _onCameraError = () => {
+    if (this.props.onCameraError) {
+      this.props.onCameraError();
+    }
+  };
 
   _onAudioInterrupted = () => {
     if (this.props.onAudioInterrupted) {
@@ -849,6 +854,7 @@ export default class Camera extends React.Component<PropsType, StateType> {
             ref={this._setReference}
             onMountError={this._onMountError}
             onCameraReady={this._onObjectDetected(this._onCameraReady)}
+            onCameraError={this._onObjectDetected(this._onCameraError)}
             onAudioInterrupted={this._onAudioInterrupted}
             onAudioConnected={this._onAudioConnected}
             onGoogleVisionBarcodesDetected={this._onObjectDetected(
@@ -856,6 +862,10 @@ export default class Camera extends React.Component<PropsType, StateType> {
             )}
             onBarCodeRead={this._onObjectDetected(this.props.onBarCodeRead)}
             onTouch={this._onTouch}
+            faceDetectEnabled={this.props.faceDetectEnabled}
+            objectDetectEnabled={this.props.objectDetectEnabled}
+            onFaceDetect={this._onObjectDetected(this.props.onFacesDetected)}
+            onObjectDetect={this._onObjectDetected(this.props.onObjectsDetected)}
             onFacesDetected={this._onObjectDetected(this.props.onFacesDetected)}
             onTextRecognized={this._onObjectDetected(this.props.onTextRecognized)}
             onPictureSaved={this._onPictureSaved}
